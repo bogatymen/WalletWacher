@@ -1,0 +1,13 @@
+[
+    {
+        "address": "0x2faf487a4414fe77e2327f0bf4ae2a264a776ad2",
+        "network": "ETH",
+        "walletName": "FTX Exchange"
+    },
+    {
+        "address": "0xE8c060F8052E07423f71D445277c61AC5138A2e5",
+        "network": "ETH",
+        "walletName": "MEV Bot"
+    }
+
+]
