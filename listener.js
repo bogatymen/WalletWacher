@@ -23,13 +23,14 @@ const collNameRaw = 'rawLogs';
 const premiumReceiversList = require('./dbToListen.json');
 
 // generate (formated by hexZeroPad) wallet' array to listen. 
-var listenArray = [];
-var len = premiumReceiversList.length;
-for (var i = 0; i < len; i++) {
-    listenArray.push(
-        ethers.utils.hexZeroPad(premiumReceiversList[i].address, 32),
-    );
-}
+//var listenArray = [];
+//var len = premiumReceiversList.length;
+//for (var i = 0; i < len; i++) {
+//    listenArray.push(
+//        ethers.utils.hexZeroPad(premiumReceiversList[i].address, 32),
+//    );
+//}
+var listenArray = premiumReceiversList.map(premiumReceiver => ethers.utils.hexZeroPad(premiumReceiver.address, 32))
 
 // ========== FUNCTIONS 
 
@@ -67,9 +68,9 @@ const main = async () => {
     })
     
   } catch(e){
-      console.log(e);
+    console.log(e);
   } finally {
-      //await client.close();
+    await client.close();
   }
 
 }
