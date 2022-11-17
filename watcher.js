@@ -5,13 +5,21 @@ const { MongoClient } = require('mongodb');
 const TelegramBot = require('node-telegram-bot-api');
 
 // ============ PROVIDER
+// dobrze byloby uniezaleznic sie od infury i zamiast brac KEY, lepiej brac caly URL
 const INFURA_ID = process.env.PROVIDER_API_KEY;
 const provider = new ethers.providers.JsonRpcProvider(`https://mainnet.infura.io/v3/${INFURA_ID}`);
 
 // ========= MongoDB 
 // Connection URL
+// korzystniej jest stworzyc baze danych w chmurze zamiast lokalnie.
+// po pierwsze dlatego, ze docelowo skrypt tez bedzie dzialal w chmurze
+// i bedziesz mogl przenosic go z boxa na box nie muszac martwic sie o przenoszenie db,
+// po drugie, bedziesz mial dostep do db z kazdego miejsca bez koniecznosci 
+// logowania sie na box i sprawdzania co jest w db
+// sprawdz sobie: https://account.mongodb.com/account/login
 const url = 'mongodb://localhost:27017';
 const client = new MongoClient(url);
+
 // Database Name
 const dbName = 'myTokens';
 const collNameRaw = 'rawLogs';
@@ -31,23 +39,24 @@ const botTK = new TelegramBot(tokenTG, {
 *  find wallet name for given address - from json file
 */
 function findWalletName(receiver){
+    // proponuje przeniesc dbToListen.json do db w chmurze. wtedy bedzie mozna latwo dodawac/usuwac adresy
     const premiumReceiversList = require('./dbToListen.json');
-    for (i=0;i<premiumReceiversList.length;i++){
-        if (receiver.toLowerCase() == premiumReceiversList[i].address.toLowerCase())        
-        return premiumReceiversList[i].walletName;
-    }
+    //for (i=0;i<premiumReceiversList.length;i++){
+    //    if (receiver.toLowerCase() == premiumReceiversList[i].address.toLowerCase())        
+    //    return premiumReceiversList[i].walletName;
+    //}
+    return premiumReceiversList
+        .find(premiumReceiver => receiver.toLowerCase() === premiumReceiver.address.toLowerCase())?.walletName;
 }
 /*
 * check if token already in tokenDB collection
 */
 async function checkTokenInMongoDB(client, tokenToCheck) {
 
-    await client.connect();
     //console.log('Connected successfully to MongoDB server');
     const db = client.db(dbName);
     const collection = db.collection(collNameTokens);
     const result = await collection.findOne({ address: tokenToCheck });
-    await client.close();
 
     if (result) {
         console.log(`Found a token ${tokenToCheck} = ${result.name}'`);
@@ -63,12 +72,12 @@ async function checkTokenInMongoDB(client, tokenToCheck) {
 *  add unknown token to tokenDB collection
 */
 async function addTokenToMongoDB(client, token) {
-    await client.connect();
     //console.log('Connected successfully to MongoDB server');
     const db = client.db(dbName);
     const collection = db.collection(collNameTokens);
+
+    // uzyj upsert, zeby nie dodawac duplikatow
     const insertResult =  await collection.insertOne(token);
-    await client.close();
     return insertResult;
 }
 
@@ -77,11 +86,9 @@ async function addTokenToMongoDB(client, token) {
 */
 
 async function deleteLogInMongo(client, logData) {
-    await client.connect();
     //const obj = await client.db(dbName).collection(collNameTokens).findOne({ name: "USDC"   });
     const result = await client.db(dbName).collection(collNameRaw).deleteOne({ _id: logData._id });
     console.log(`${result.deletedCount} document(s) was deleted.`);
-    await client.close();
     return result;
 }
 
@@ -90,6 +97,12 @@ async function deleteLogInMongo(client, logData) {
 */
 
 function formatDataToTG(tokenData) {
+    // sprobuj formatowac message w HTML. 
+    // bedziesz mogl tworzyc linki w ktore da sie kliknac, skracajac tekst
+    // https://core.telegram.org/bots/api#sendmessage
+    // spojrz na parse_mode -> formatting options
+    // https://core.telegram.org/bots/api#html-style
+
     //var dateFormat = new Date(obj.date);
     let tempChat ="  Wallet Name => " + tokenData.wallet;
     tempChat += "\n Token Name => " + tokenData.name;
@@ -130,6 +143,9 @@ function getTokenDetails(tempLog){
             if (eventData > 10000) tokenType = "ERC20";
             else tokenType = "ERC721";
             tokenDetails.tokenType = tokenType;
+
+            // powinienes uzyc funkcji formatUnits z odpowiednia wartoscia decimals
+            // w przeciwnym razie jesli decimals != 18 bedziesz mial zle wyniki
             tokenDetails.value = ethers.utils.formatEther(eventData);
             break;
         case 4:
@@ -153,13 +169,19 @@ function getTokenDetails(tempLog){
 
 // ========= MAIN
 async function main() {
+    // trzeba znalezc sposob aby nie przeciazac RPC. moim zdaniem przede wszystkim musisz skupic sie 
+    // na cachowaniu i sprawdzic czy to wystarczy. jesli nie, trzeba bedzie zaimplementowac request
+    // counter, zliczac requesty i oczekiwac jesli przekroczono limit
 
     try{
+        // polaczenie z baza danych jest stabilne i mozesz utrzymywac je przez caly czas dzialania
+        // skryptu. nie ma potrzeby bys laczyl sie z db za kazdym razem gdy wykonujesz funkcje i
+        // zamykal polaczenie. utrzymujac caly czas jedno polaczenie wszystko bedzie dzialac szybciej
         await client.connect();
         const db = client.db(dbName);
         const collection = db.collection(collNameRaw);
         const logArray =  await collection.find({}).toArray();
-        await client.close();
+
         //process the logs
         for (let i=0; i < logArray.length; i++){
 
@@ -244,7 +266,7 @@ async function main() {
     } catch(err){
         console.log(err);
     } finally{
-
+        await client.close();
     }
 }
 
